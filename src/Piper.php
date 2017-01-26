@@ -13,10 +13,13 @@ declare(strict_types=1);
 
 namespace SolidWorx\Piper;
 
-class Piper
+final class Piper
 {
+    const FAIL_ON_ERROR = 0;
+    const CONTINUE_ON_ERROR = 1;
+
     /**
-     * @var PipeInterface[]
+     * @var Stage[]
      */
     private $stages;
 
@@ -33,11 +36,12 @@ class Piper
 
     /**
      * @param callable|PipeInterface $pipe
+     * @param int                    $onError
      *
      * @return Piper
      * @throws \InvalidArgumentException
      */
-    public function pipe($pipe): self
+    public function pipe($pipe, int $onError = self::FAIL_ON_ERROR): self
     {
         if (!is_callable($pipe) && !$pipe instanceof PipeInterface) {
             throw new \InvalidArgumentException(
@@ -45,7 +49,7 @@ class Piper
             );
         }
 
-        $this->stages->enqueue($pipe);
+        $this->stages->enqueue(new Stage($pipe, $onError));
 
         return $this;
     }
@@ -66,14 +70,14 @@ class Piper
 
         foreach ($this->stages as $stage) {
             try {
-                $this->processed->enqueue($stage);
+                $this->processed->enqueue($stage->getPipe());
 
-                if ($stage instanceof PipeInterface) {
-                    $stage->process($context);
-                } else {
-                    $stage($context);
-                }
+                $stage($context);
             } catch (\Throwable $t) {
+                if (self::CONTINUE_ON_ERROR === $stage->getOnError()) {
+                    continue;
+                }
+
                 $context->setException($t);
                 $this->rollback($context);
 

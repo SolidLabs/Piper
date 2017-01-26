@@ -49,20 +49,43 @@ class PiperTest extends \PHPUnit_Framework_TestCase
     {
         $pipe = new Piper();
 
-        $mock = $this->createMock(RollbackInterface::class);
+        $step1 = $this->createMock(RollbackInterface::class);
 
         $exception = new \Exception;
-        $mock->expects($this->once())
+        $step1->expects($this->once())
             ->method('process')
             ->willThrowException($exception);
 
-        $mock->expects($this->once())
+        $step1->expects($this->once())
             ->method('rollback');
 
-        $pipe->pipe($mock);
+        $step2 = $this->createMock(RollbackInterface::class);
+        $step2->expects($this->never())
+            ->method('process');
+
+        $pipe->pipe($step1);
 
         $this->expectException(\Exception::class);
 
         $this->assertSame($exception, $pipe->process()->getException());
+    }
+
+    public function testSkipError()
+    {
+        $pipe = new Piper();
+
+        $step1 = $this->createMock(PipeInterface::class);
+        $step1->expects($this->once())
+            ->method('process')
+            ->willThrowException(new \Exception);
+
+        $step2 = $this->createMock(PipeInterface::class);
+        $step2->expects($this->once())
+            ->method('process');
+
+        $pipe->pipe($step1, Piper::CONTINUE_ON_ERROR);
+        $pipe->pipe($step2);
+
+        $this->assertNull($pipe->process()->getException());
     }
 }
